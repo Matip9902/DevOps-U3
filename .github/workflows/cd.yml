@@ -1,0 +1,79 @@
+name: CD - Deploy to EKS
+
+on:
+  workflow_run:
+    workflows: ["CI - Test, Build and Push to ECR"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-eks
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: innovatech-spa
+  K8S_NAMESPACE: innovatech
+
+jobs:
+  deploy:
+    name: Deploy commit to EKS
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER"
+
+      - name: Install Metrics Server
+        run: kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml
+
+      - name: Create database secret
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+        run: |
+          kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n "$K8S_NAMESPACE" create secret generic database-credentials \
+            --from-literal=root-password="$MYSQL_ROOT_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Render and apply Kubernetes manifests
+        env:
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          export ECR_REGISTRY="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
+          mkdir -p rendered
+          for file in infra/k8s/*.yml; do
+            name="$(basename "$file")"
+            if [ "$name" != "secret.example.yml" ]; then
+              envsubst '${ECR_REGISTRY} ${IMAGE_TAG}' < "$file" > "rendered/$name"
+            fi
+          done
+          kubectl apply -k rendered
+
+      - name: Verify rollout
+        run: |
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/backend-ventas --timeout=5m
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/backend-despacho --timeout=5m
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/frontend --timeout=5m
+          kubectl -n "$K8S_NAMESPACE" get pods,services,hpa
+
+      - name: Show public URL
+        run: |
+          kubectl -n "$K8S_NAMESPACE" get service frontend \
+            -o jsonpath='http://{.status.loadBalancer.ingress[0].hostname}{"\n"}'

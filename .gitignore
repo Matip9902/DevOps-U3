@@ -1,0 +1,10 @@
+.env
+.DS_Store
+**/target/
+**/node_modules/
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+terraform.tfstate
+*.tfplan
+crash.log

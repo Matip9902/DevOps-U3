@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-ventas
+spec:
+  selector:
+    app: backend-ventas
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-despacho
+spec:
+  selector:
+    app: backend-despacho
+  ports:
+    - port: 8080
+      targetPort: 8080
