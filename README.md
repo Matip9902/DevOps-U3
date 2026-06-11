@@ -24,7 +24,7 @@ La VPC usa dos subredes publicas en zonas de disponibilidad distintas. EKS admin
 |---|---|
 | Frontend | React, Vite y Nginx |
 | Backend | Spring Boot 3 y Java 17 |
-| Base de datos | MySQL 8 con PersistentVolumeClaim |
+| Base de datos | MySQL 8 con almacenamiento temporal para AWS Academy |
 | Orquestacion | Amazon EKS |
 | Registro | Amazon ECR, tres repositorios |
 | Infraestructura | Terraform |
@@ -50,6 +50,8 @@ kubectl get nodes
 ```
 
 Terraform crea VPC, Internet Gateway, dos subredes, tabla de rutas, Security Group, clúster EKS, node group y repositorios ECR para frontend, ventas y despacho.
+
+MySQL usa `emptyDir` para evitar el complemento EBS CSI, cuyos permisos normalmente no están disponibles en AWS Academy. Si un pod de MySQL se recrea, los datos temporales se pierden y los backends vuelven a cargar automáticamente los datos de demostración. Para producción se recomienda Amazon RDS.
 
 > AWS Academy renueva sus credenciales en cada laboratorio. Actualiza los GitHub Secrets antes de ejecutar el pipeline.
 

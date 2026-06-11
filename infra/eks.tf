@@ -35,9 +35,3 @@ resource "aws_eks_node_group" "workers" {
   depends_on = [aws_eks_cluster.eks]
 }
 
-resource "aws_eks_addon" "ebs_csi" {
-  cluster_name = aws_eks_cluster.eks.name
-  addon_name   = "aws-ebs-csi-driver"
-
-  depends_on = [aws_eks_node_group.workers]
-}
